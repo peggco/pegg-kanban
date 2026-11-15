@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.pegg.dev/logo/light-32x32.png"
+    media="(prefers-color-scheme: light)" />
+  <link rel="icon" type="image/png" sizes="64x64" href="https://cdn.pegg.dev/logo/light-64x64.png"
+    media="(prefers-color-scheme: light)" />
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.pegg.dev/logo/dark-32x32.png"
+    media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" sizes="64x64" href="https://cdn.pegg.dev/logo/dark-64x64.png"
+    media="(prefers-color-scheme: dark)" />
+  <link rel="apple-touch-icon" href="https://cdn.pegg.dev/logo/light-bg-180x180.png" />
+  <title>Pegg Kanban</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("pegg-kanban-theme");
+        var theme = stored === "light" || stored === "dark"
+          ? stored
+          : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.classList.toggle("dark", theme === "dark");
+      } catch (err) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo brand-logo-light" src="https://cdn.pegg.dev/logo/light-logo.png" alt="Pegg" width="128" />
+      <img class="brand-logo brand-logo-dark" src="https://cdn.pegg.dev/logo/dark-logo.png" alt="Pegg" width="128" />
+      <div class="brand-text">
+        <h1 id="board-name">Pegg Kanban</h1>
+        <span id="board-repo" class="repo"></span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="server" id="server-state">
+        <span id="server-dot" class="dot" aria-hidden="true"></span>
+        <span id="server-label">connecting</span>
+      </div>
+      <div class="actions">
+        <div class="search">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5"></circle>
+            <path d="M16 16l4 4"></path>
+          </svg>
+          <input id="search" type="search" placeholder="Search cards" aria-label="Search cards" autocomplete="off">
+        </div>
+        <button id="sync-btn" class="btn btn-outline" type="button" aria-label="Sync issues" title="Sync issues">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 8v5h-5"></path>
+            <path d="M4 16v-5h5"></path>
+            <path d="M6.1 9a7 7 0 0 1 11.6-1.6L20 10"></path>
+            <path d="M17.9 15a7 7 0 0 1-11.6 1.6L4 14"></path>
+          </svg>
+          <span class="btn-label">Sync issues</span>
+        </button>
+        <button id="new-btn" class="btn btn-primary" type="button" aria-label="New card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+          <span class="btn-label">New card</span>
+        </button>
+        <button id="theme-btn" class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path
+              d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4">
+            </path>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="provider-notice" class="notice" role="status" hidden></div>
+
+  <main id="board" class="board" aria-label="Kanban board"></main>
+
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <div id="new-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="new-heading">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Board</p>
+          <h2 id="new-heading">New card</h2>
+        </div>
+        <button type="button" class="icon" data-close="new-modal" aria-label="Close">×</button>
+      </div>
+      <form id="new-form" class="form">
+        <label>Title
+          <input name="title" required maxlength="200" autocomplete="off">
+        </label>
+        <label>Description
+          <textarea name="body" rows="4" placeholder="What should the agent do?"></textarea>
+        </label>
+        <div class="grid2">
+          <label>Column
+            <select name="column" id="new-column"></select>
+          </label>
+          <label>Priority
+            <select name="priority">
+              <option value="">none</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="urgent">urgent</option>
+            </select>
+          </label>
+        </div>
+        <label>Labels
+          <input name="labels" placeholder="bug, ui" autocomplete="off">
+        </label>
+        <div class="grid2">
+          <label>Issue repo
+            <input name="issue_repo" placeholder="owner/name" autocomplete="off">
+          </label>
+          <label>Issue number
+            <input name="issue_number" type="number" min="0" step="1" autocomplete="off">
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-close="new-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add card</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="sync-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="sync-heading">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Issues</p>
+          <h2 id="sync-heading">Sync issues</h2>
+        </div>
+        <button type="button" class="icon" data-close="sync-modal" aria-label="Close">×</button>
+      </div>
+      <p id="sync-detail" class="sync-detail" hidden></p>
+      <form id="sync-form" class="form">
+        <label>Provider
+          <select name="provider" id="sync-provider"></select>
+        </label>
+        <div class="provider-panel">
+          <label>Target
+            <input name="target" placeholder="Repository, project, or tracker target" autocomplete="off">
+          </label>
+          <label>Labels
+            <input name="labels" placeholder="bug, help wanted" autocomplete="off">
+          </label>
+          <div class="grid2">
+            <label>State
+              <input name="state" placeholder="open, opened, in progress…" autocomplete="off">
+            </label>
+            <label>Limit
+              <input name="limit" type="number" min="1" max="500" value="50">
+            </label>
+          </div>
+          <label>Query
+            <input name="query" placeholder="Provider-specific query override" autocomplete="off">
+          </label>
+        </div>
+        <p id="sync-result" class="sync-result" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-close="sync-modal">Close</button>
+          <button id="sync-submit" type="submit" class="btn btn-primary">Sync now</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="drawer" class="drawer" hidden>
+    <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-heading">
+      <div class="modal-head drawer-head">
+        <div>
+          <p class="eyebrow">Card</p>
+          <h2 id="drawer-heading">Details</h2>
+        </div>
+        <button type="button" class="icon" data-close="drawer" aria-label="Close">×</button>
+      </div>
+      <div class="drawer-body">
+        <label>Title
+          <input id="d-title" maxlength="200" autocomplete="off">
+        </label>
+        <label>Description
+          <textarea id="d-body" rows="5"></textarea>
+        </label>
+        <div class="grid2">
+          <label>Column
+            <select id="d-column"></select>
+          </label>
+          <label>Priority
+            <select id="d-priority">
+              <option value="">none</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="urgent">urgent</option>
+            </select>
+          </label>
+        </div>
+        <label>Labels
+          <input id="d-labels" autocomplete="off">
+        </label>
+        <label>Assignee
+          <input id="d-assignee" autocomplete="off">
+        </label>
+
+        <dl id="d-meta" class="meta"></dl>
+
+        <div class="drawer-actions">
+          <button id="d-save" class="btn btn-primary" type="button">Save</button>
+          <button id="d-run" class="btn btn-outline" type="button">Run</button>
+          <button id="d-retry" class="btn btn-outline" type="button">Retry</button>
+          <button id="d-cancel" class="btn btn-danger" type="button">Cancel run</button>
+          <button id="d-delete" class="btn btn-danger" type="button">Delete</button>
+        </div>
+
+        <div class="log-head">
+          <h3>Agent log</h3>
+          <span id="d-log-status" class="log-status"></span>
+        </div>
+        <pre id="d-log" class="log" tabindex="0">(no log yet)</pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+
+</html>
