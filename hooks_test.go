@@ -14,6 +14,7 @@ type fakeHookRunner struct {
 	providers  []ProviderInfo
 	issues     map[string][]HookIssue
 	fetchErr   map[string]string
+	routes     map[string]string
 	succeeded  []CardSucceeded
 	runContext *RunContext
 	applyErr   error
@@ -64,6 +65,15 @@ func (f *fakeHookRunner) FilterInto(ctx context.Context, name string, value, out
 		}
 		req.Issues = append(req.Issues, f.issues[req.Provider]...)
 		data, _ := json.Marshal(req)
+		_ = json.Unmarshal(data, out)
+		return hooks.Outcome{Value: data}, nil
+	case HookChangeRequestRoutes:
+		routes := map[string]string{}
+		_ = json.Unmarshal(raw, &routes)
+		for key, value := range f.routes {
+			routes[key] = value
+		}
+		data, _ := json.Marshal(routes)
 		_ = json.Unmarshal(data, out)
 		return hooks.Outcome{Value: data}, nil
 	}
@@ -215,6 +225,9 @@ func TestRunSuccessHookPayload(t *testing.T) {
 	if !payload.Feedback || !payload.CreateChangeRequest || payload.TransitionOnSuccess != "Done" || payload.BaseBranch != "develop" {
 		t.Fatalf("payload flags = %#v", payload)
 	}
+	if payload.ChangeRequestProvider != "example" {
+		t.Fatalf("change request provider = %q, want example", payload.ChangeRequestProvider)
+	}
 }
 
 func TestBoardMigratesLegacySync(t *testing.T) {
@@ -239,5 +252,33 @@ func TestBoardMigratesLegacySync(t *testing.T) {
 	}
 	if board.Sync["gitlab"].LastError != "boom" || board.Sync["gitlab"].Target != "group/project" {
 		t.Fatalf("gitlab migration = %#v", board.Sync["gitlab"])
+	}
+}
+
+func TestProvidersRequireRepoForRepoTarget(t *testing.T) {
+	svc := newHooksService(t)
+	svc.hookRunner = &fakeHookRunner{
+		providers: []ProviderInfo{
+			{ID: "git", Enabled: true, Available: true, RepoTarget: true},
+			{ID: "ticket", Enabled: true, Available: true, Target: "PROJ"},
+		},
+	}
+	providers, err := svc.Providers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if providers[0].Available {
+		t.Fatal("repo-target provider should be unavailable without a git repository")
+	}
+	if !providers[1].Available {
+		t.Fatal("provider with an explicit target should stay available")
+	}
+}
+
+func TestSyncProviderRequiresRepo(t *testing.T) {
+	svc := newHooksService(t)
+	svc.hookRunner = &fakeHookRunner{}
+	if _, err := svc.syncProvider(context.Background(), ProviderInfo{ID: "git", Enabled: true, Available: true}, SyncRequest{}); err == nil {
+		t.Fatal("expected sync to fail without a git repository")
 	}
 }

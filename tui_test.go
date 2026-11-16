@@ -120,7 +120,7 @@ func TestKanbanTUIPageReflectsProviders(t *testing.T) {
 	if got := strings.Join(fields["provider"].Options, ","); got != "all,example,disabled" {
 		t.Fatalf("provider options = %q", got)
 	}
-	for _, id := range []string{"target", "query", "labels", "state", "limit"} {
+	for _, id := range []string{"query", "labels", "state", "limit"} {
 		if _, ok := fields[id]; !ok {
 			t.Fatalf("sync action missing field %q", id)
 		}
