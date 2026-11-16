@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	HookProviders     = "kanban.providers"
-	HookIssueFetch    = "kanban.issues.fetch"
-	HookRunPrepare    = "kanban.run.prepare"
-	HookCardSucceeded = "kanban.card.succeeded"
+	HookProviders           = "kanban.providers"
+	HookIssueFetch          = "kanban.issues.fetch"
+	HookRunPrepare          = "kanban.run.prepare"
+	HookCardSucceeded       = "kanban.card.succeeded"
+	HookChangeRequestRoutes = "kanban.change_request.routes"
 )
 
 type RunContext struct {
@@ -28,10 +29,11 @@ type RunContext struct {
 }
 
 type RunPrepare struct {
-	Card       Card       `json:"card"`
-	Repo       string     `json:"repo"`
-	BaseBranch string     `json:"base_branch,omitempty"`
-	Context    RunContext `json:"context"`
+	Card                  Card       `json:"card"`
+	Repo                  string     `json:"repo"`
+	BaseBranch            string     `json:"base_branch,omitempty"`
+	ChangeRequestProvider string     `json:"change_request_provider,omitempty"`
+	Context               RunContext `json:"context"`
 }
 
 type ProviderInfo struct {
@@ -43,6 +45,7 @@ type ProviderInfo struct {
 	Detail        string `json:"detail,omitempty"`
 	Target        string `json:"target,omitempty"`
 	SyncMinutes   int    `json:"sync_minutes,omitempty"`
+	RepoTarget    bool   `json:"repo_target,omitempty"`
 }
 
 type HookIssue struct {
@@ -71,13 +74,14 @@ type IssueFetch struct {
 }
 
 type CardSucceeded struct {
-	Card                Card        `json:"card"`
-	Context             *RunContext `json:"context,omitempty"`
-	Summary             string      `json:"summary,omitempty"`
-	Feedback            bool        `json:"feedback"`
-	CreateChangeRequest bool        `json:"create_change_request"`
-	TransitionOnSuccess string      `json:"transition_on_success,omitempty"`
-	BaseBranch          string      `json:"base_branch,omitempty"`
+	Card                  Card        `json:"card"`
+	Context               *RunContext `json:"context,omitempty"`
+	Summary               string      `json:"summary,omitempty"`
+	Feedback              bool        `json:"feedback"`
+	CreateChangeRequest   bool        `json:"create_change_request"`
+	ChangeRequestProvider string      `json:"change_request_provider,omitempty"`
+	TransitionOnSuccess   string      `json:"transition_on_success,omitempty"`
+	BaseBranch            string      `json:"base_branch,omitempty"`
 }
 
 type hookRunner interface {

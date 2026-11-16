@@ -49,6 +49,21 @@ func (s *Service) Providers(ctx context.Context) ([]ProviderInfo, error) {
 	if len(outcome.Errors) > 0 {
 		log.Printf("kanban: provider discovery errors: %s", strings.Join(outcome.Errors, "; "))
 	}
+	repoTarget := s.syncTarget()
+	for i := range providers {
+		if !providers[i].RepoTarget {
+			continue
+		}
+		if strings.TrimSpace(providers[i].Target) == "" {
+			providers[i].Target = repoTarget
+		}
+		if strings.TrimSpace(providers[i].Target) == "" {
+			providers[i].Available = false
+			if strings.TrimSpace(providers[i].Detail) == "" {
+				providers[i].Detail = "No git repository found; open the board inside a git repository"
+			}
+		}
+	}
 	return providers, nil
 }
 
@@ -115,6 +130,14 @@ func (s *Service) syncProvider(ctx context.Context, info ProviderInfo, req SyncR
 	target := strings.TrimSpace(req.Target)
 	if target == "" {
 		target = strings.TrimSpace(info.Target)
+	}
+	if target == "" {
+		target = s.syncTarget()
+	}
+	if target == "" {
+		err := fmt.Errorf("%s sync: no git repository found in %s", info.ID, s.settings.Workdir)
+		s.recordSyncError(info.ID, "", err)
+		return SyncStats{}, err
 	}
 	labels := req.Labels
 	if len(labels) == 0 {

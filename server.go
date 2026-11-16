@@ -638,6 +638,9 @@ func (s *Service) handleSync(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleConfig(w http.ResponseWriter, r *http.Request) {
 	config := s.settings.sanitized()
+	if target := s.syncTarget(); target != "" {
+		config["sync_target"] = target
+	}
 	providers, err := s.Providers(r.Context())
 	if err != nil {
 		config["providers"] = []ProviderInfo{}
@@ -646,6 +649,15 @@ func (s *Service) handleConfig(w http.ResponseWriter, r *http.Request) {
 		config["providers"] = providers
 	}
 	writeJSON(w, http.StatusOK, config)
+}
+
+func (s *Service) syncTarget() string {
+	if board, err := s.store.Load(); err == nil && strings.TrimSpace(board.Repo) != "" {
+		if target := gitRemoteTarget(board.Repo); target != "" {
+			return target
+		}
+	}
+	return gitRemoteTarget(s.settings.Workdir)
 }
 
 func (s *Service) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -754,13 +766,14 @@ func (s *Service) runSuccessHooks(card *Card, runContext *RunContext) {
 		safeContext = &copy
 	}
 	payload := CardSucceeded{
-		Card:                *card,
-		Context:             safeContext,
-		Summary:             feedbackSummary(s.store.LogPath(card.ID)),
-		Feedback:            s.settings.Feedback,
-		CreateChangeRequest: s.settings.CreateChangeRequest,
-		TransitionOnSuccess: s.settings.TransitionOnSuccess,
-		BaseBranch:          s.baseBranch(runContext),
+		Card:                  *card,
+		Context:               safeContext,
+		Summary:               feedbackSummary(s.store.LogPath(card.ID)),
+		Feedback:              s.settings.Feedback,
+		CreateChangeRequest:   s.settings.CreateChangeRequest,
+		ChangeRequestProvider: s.resolveChangeRequestProvider(ctx, card),
+		TransitionOnSuccess:   s.settings.TransitionOnSuccess,
+		BaseBranch:            s.baseBranch(runContext),
 	}
 	outcome, err := s.hookRunner.Apply(ctx, HookCardSucceeded, hooks.HookAction, payload)
 	if err != nil {

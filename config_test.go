@@ -50,7 +50,7 @@ func TestDefaultSettings(t *testing.T) {
 	if settings.SyncColumn != "backlog" || settings.SyncLimit != 50 || settings.SyncMinutes != 0 {
 		t.Fatalf("sync defaults: %+v", settings)
 	}
-	if !settings.SyncUpdateExisting || !settings.Feedback || settings.CreateChangeRequest {
+	if !settings.SyncUpdateExisting || !settings.Feedback || !settings.CreateChangeRequest {
 		t.Fatalf("sync flags: %+v", settings)
 	}
 	if settings.PeggBinary == "" || settings.HooksTimeout <= 0 {

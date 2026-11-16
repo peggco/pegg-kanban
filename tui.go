@@ -143,7 +143,6 @@ func (p *Plugin) kanbanTUIPage() (peggplugin.TUIPage, error) {
 			{ID: "stop", Label: "Stop server", Description: "Stop the detached Kanban web server."},
 			{ID: "sync", Label: "Sync issues", Description: "Import and update integration issues.", Fields: []peggplugin.TUIField{
 				{ID: "provider", Label: "Provider", Value: "all", Options: syncOptions},
-				{ID: "target", Label: "Target", Placeholder: "repository, project, or tracker target"},
 				{ID: "query", Label: "Query", Placeholder: "provider-specific override"},
 				{ID: "labels", Label: "Labels", Placeholder: "bug, ui"},
 				{ID: "state", Label: "State", Placeholder: "open / opened"},
@@ -253,6 +252,8 @@ func kanbanSettingsFields(settings Settings) []peggplugin.TUIField {
 		{ID: "sync_state", Label: "Issue state", Value: settings.SyncState},
 		{ID: "feedback", Label: "Send feedback on success", Value: strconv.FormatBool(settings.Feedback), Options: boolOptions},
 		{ID: "create_change_request", Label: "Create change requests automatically", Value: strconv.FormatBool(settings.CreateChangeRequest), Options: boolOptions},
+		{ID: "change_request_provider", Label: "Default change request provider", Value: settings.ChangeRequestProvider, Placeholder: "e.g. bitbucket"},
+		{ID: "change_request_providers", Label: "Change request routes (JSON)", Value: formatRoutes(settings.ChangeRequestProviders), Placeholder: `{"jira":"bitbucket"}`},
 		{ID: "transition_on_success", Label: "Transition on success", Value: settings.TransitionOnSuccess},
 		{ID: "hooks_timeout_seconds", Label: "Hooks timeout (seconds)", Value: strconv.Itoa(settings.HooksTimeout)},
 		{ID: "max_parallel", Label: "Max parallel runs", Value: strconv.Itoa(settings.MaxParallel)},
@@ -313,7 +314,6 @@ func (p *Plugin) executeTUIAction(req peggplugin.TUIActionRequest) (*peggplugin.
 			if v := strings.TrimSpace(req.Values["provider"]); v != "" {
 				opts.Provider = v
 			}
-			opts.Target = strings.TrimSpace(req.Values["target"])
 			opts.Query = strings.TrimSpace(req.Values["query"])
 			opts.Labels = splitList(req.Values["labels"])
 			opts.State = strings.TrimSpace(req.Values["state"])
@@ -375,6 +375,14 @@ func (p *Plugin) tuiSaveSettings(values map[string]string) (string, error) {
 	}
 	if v, ok := values["create_change_request"]; ok {
 		settings.CreateChangeRequest = parseBoolValue(v, settings.CreateChangeRequest)
+	}
+	if v, ok := values["change_request_provider"]; ok {
+		settings.ChangeRequestProvider = strings.TrimSpace(v)
+	}
+	if v, ok := values["change_request_providers"]; ok {
+		if routes, err := parseRoutes(v); err == nil {
+			settings.ChangeRequestProviders = routes
+		}
 	}
 	if v, ok := values["transition_on_success"]; ok {
 		settings.TransitionOnSuccess = strings.TrimSpace(v)
@@ -600,6 +608,8 @@ func persistKanbanSettings(settings Settings) (string, error) {
 	entry["sync_state"] = settings.SyncState
 	entry["feedback"] = settings.Feedback
 	entry["create_change_request"] = settings.CreateChangeRequest
+	entry["change_request_provider"] = settings.ChangeRequestProvider
+	entry["change_request_providers"] = settings.ChangeRequestProviders
 	entry["transition_on_success"] = settings.TransitionOnSuccess
 	entry["hooks_timeout_seconds"] = settings.HooksTimeout
 	entry["max_parallel"] = settings.MaxParallel
@@ -747,4 +757,27 @@ func tuiURLDetail(url string) string {
 		return "not running"
 	}
 	return url
+}
+
+func formatRoutes(routes map[string]string) string {
+	if len(routes) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(routes)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func parseRoutes(value string) (map[string]string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	routes := map[string]string{}
+	if err := json.Unmarshal([]byte(value), &routes); err != nil {
+		return nil, err
+	}
+	return normalizeRoutes(routes), nil
 }

@@ -123,7 +123,9 @@ plugin `Deps.Options`. Environment overrides are applied last.
         "sync_limit": 50,
         "sync_state": "",
         "feedback": true,
-        "create_change_request": false,
+        "create_change_request": true,
+        "change_request_provider": "",
+        "change_request_providers": {},
         "transition_on_success": "",
         "hooks_timeout_seconds": 90
       }
@@ -156,7 +158,9 @@ plugin `Deps.Options`. Environment overrides are applied last.
 | `sync_limit` | `50` | Maximum issues per provider sync |
 | `sync_state` | empty | Default issue state; the provider may override it |
 | `feedback` | `true` | Ask integration plugins to comment after a successful run |
-| `create_change_request` | `false` | Ask integration plugins to open a PR/MR after a successful run |
+| `create_change_request` | `true` | Ask integration plugins to open a PR/MR after a successful run |
+| `change_request_provider` | empty | Change-request provider for cards with no issue (or no route) |
+| `change_request_providers` | `{}` | Route issue provider → change-request provider, e.g. `{"jira":"bitbucket"}` |
 | `transition_on_success` | empty | Status to pass to integrations that support transitions |
 | `hooks_timeout_seconds` | `90` | Timeout for hook dispatch calls |
 
@@ -180,6 +184,8 @@ Environment overrides:
 | `PEGG_KANBAN_SYNC_STATE` | Default issue state |
 | `PEGG_KANBAN_FEEDBACK` | `true`/`false` |
 | `PEGG_KANBAN_CREATE_CHANGE_REQUEST` | `true`/`false` |
+| `PEGG_KANBAN_CHANGE_REQUEST_PROVIDER` | Default change-request provider |
+| `PEGG_KANBAN_CHANGE_REQUEST_PROVIDERS` | JSON object of issue provider → change-request provider |
 | `PEGG_KANBAN_TRANSITION_ON_SUCCESS` | Status for integrations |
 | `PEGG_KANBAN_BASE` | Base branch for the optional worktree hook |
 | `PEGG_KANBAN_AUTO_OPEN` | `true`/`false` |
@@ -323,7 +329,7 @@ sanitized `card.context` for display and for the success hook; `env` is never pe
 ## Integration hooks
 
 Kanban contains no provider names, credentials, API clients, or bridge binaries. Issue
-integrations register handlers for three hooks through the Pegg plugin SDK:
+integrations register handlers for these hooks through the Pegg plugin SDK:
 
 | Hook | Kind | Payload | Result |
 |---|---|---|---|
@@ -331,6 +337,7 @@ integrations register handlers for three hooks through the Pegg plugin SDK:
 | `kanban.issues.fetch` | filter | `IssueFetch` | handlers append normalized issues |
 | `kanban.run.prepare` | filter | `RunPrepare` | handlers change the run context |
 | `kanban.card.succeeded` | action | `CardSucceeded` | optional JSON output |
+| `kanban.change_request.routes` | filter | `map[string]string` | handlers add default issue → change-request routes |
 
 `ProviderInfo`:
 
@@ -384,11 +391,52 @@ integrations register handlers for three hooks through the Pegg plugin SDK:
   "context": {"kind": "worktree", "path": "...", "branch": "pegg/...", "base": "main", "label": "..."},
   "summary": "truncated agent output",
   "feedback": true,
-  "create_change_request": false,
+  "create_change_request": true,
+  "change_request_provider": "provider-id",
   "transition_on_success": "",
   "base_branch": "main"
 }
 ```
+
+`RunPrepare` carries the same `change_request_provider` field so the plugin that will
+open the change request is also the one that prepares the worktree.
+
+### Change-request routing
+
+The issue source and the change-request target are independent. Kanban resolves a
+`change_request_provider` for every card and passes it to `kanban.run.prepare` and
+`kanban.card.succeeded`:
+
+1. If `change_request_providers` maps the card's issue provider, use that value
+   (an empty value disables the change request for that provider).
+2. Otherwise use the issue provider itself.
+3. For cards with no issue, use `change_request_provider`.
+
+Default routes come from the `kanban.change_request.routes` filter, so Kanban itself
+stays provider-agnostic. `kanban-bitbucket` contributes `{"jira": "bitbucket"}` by
+default, which keeps the Jira → Bitbucket flow working out of the box. User config in
+`change_request_providers` always wins over plugin defaults.
+
+Example: GitHub issues open GitHub PRs, GitLab issues open GitLab MRs, and Jira issues
+open Bitbucket PRs:
+
+```json
+{
+  "plugins": {
+    "options": {
+      "kanban": {
+        "create_change_request": true,
+        "change_request_providers": {"jira": "bitbucket"}
+      }
+    }
+  }
+}
+```
+
+Each git-host plugin handles `kanban.run.prepare` and `kanban.card.succeeded` only when
+it is the resolved `change_request_provider`. Issue commenting and transitions stay
+gated on the issue's own provider, so a Jira issue routed to Bitbucket is still
+commented and transitioned by `kanban-jira`.
 
 ### Dispatch
 
@@ -422,8 +470,8 @@ pegg hooks apply <name> --kind filter|action --value - --json
   `updated`, and `target`.
 - After a successful run, `kanban.card.succeeded` receives the card, optional worktree, truncated
   log summary, and the generic `feedback`, `create_change_request`,
-  `transition_on_success`, and `base_branch` settings. Each integration decides whether
-  to comment, transition, or open a PR/MR.
+  `change_request_provider`, `transition_on_success`, and `base_branch` settings. Each
+  integration decides whether to comment, transition, or open a PR/MR.
 
 ### Without integration plugins
 

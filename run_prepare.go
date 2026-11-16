@@ -15,9 +15,10 @@ func (s *Service) prepareRun(ctx context.Context, card *Card, repo string) (*Run
 		return nil, nil
 	}
 	req := RunPrepare{
-		Card:       *card,
-		Repo:       repo,
-		BaseBranch: s.settings.BaseBranch,
+		Card:                  *card,
+		Repo:                  repo,
+		BaseBranch:            s.settings.BaseBranch,
+		ChangeRequestProvider: s.resolveChangeRequestProvider(ctx, card),
 		Context: RunContext{
 			Kind:  "repo",
 			Path:  repo,

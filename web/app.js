@@ -535,8 +535,6 @@
       : "";
     els.syncDetail.hidden = !unavailable;
     els.syncSubmit.disabled = unavailable;
-    const form = els.syncForm;
-    if (info && info.target && !form.target.value) form.target.value = info.target;
   }
 
   function openSyncModal() {
@@ -546,7 +544,6 @@
       if (!form.labels.value) form.labels.value = (state.config.sync_labels || []).join(", ");
       if (!form.state.value) form.state.value = state.config.sync_state || "";
       if (!form.limit.value && state.config.sync_limit) form.limit.value = state.config.sync_limit;
-      if (!form.target.value) form.target.value = state.config.sync_target || "";
       if (!form.query.value) form.query.value = "";
     }
     const currentInfo = providerInfo(els.syncProvider.value);
@@ -905,7 +902,6 @@
     const provider = String(form.get("provider") || "all").trim() || "all";
     const payload = {
       provider: provider,
-      target: String(form.get("target") || "").trim(),
       labels: splitLabels(String(form.get("labels") || "")),
       state: String(form.get("state") || "").trim(),
       limit: parseInt(String(form.get("limit") || "50"), 10) || 50,

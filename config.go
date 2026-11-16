@@ -12,58 +12,61 @@ import (
 const version = "1.0.0"
 
 type Settings struct {
-	Enabled             bool     `json:"enabled"`
-	Host                string   `json:"host"`
-	Port                int      `json:"port"`
-	APIToken            string   `json:"api_token"`
-	AutoOpen            bool     `json:"auto_open"`
-	PeggBinary          string   `json:"pegg_binary"`
-	AgentArgs           []string `json:"agent_args"`
-	Provider            string   `json:"provider"`
-	Model               string   `json:"model"`
-	MaxParallel         int      `json:"max_parallel"`
-	TriggerColumn       string   `json:"trigger_column"`
-	ReviewColumn        string   `json:"review_column"`
-	AutoMoveOnSuccess   bool     `json:"auto_move_on_success"`
-	AutoAnswer          bool     `json:"auto_answer"`
-	AutoAnswerValue     string   `json:"auto_answer_value"`
-	BaseBranch          string   `json:"base_branch"`
-	SyncColumn          string   `json:"sync_column"`
-	SyncMinutes         int      `json:"sync_minutes"`
-	SyncUpdateExisting  bool     `json:"sync_update_existing"`
-	SyncLabels          []string `json:"sync_labels"`
-	SyncLimit           int      `json:"sync_limit"`
-	SyncState           string   `json:"sync_state"`
-	Feedback            bool     `json:"feedback"`
-	CreateChangeRequest bool     `json:"create_change_request"`
-	TransitionOnSuccess string   `json:"transition_on_success"`
-	HooksTimeout        int      `json:"hooks_timeout_seconds"`
-	Workdir             string   `json:"-"`
-	PluginPath          string   `json:"-"`
+	Enabled                bool              `json:"enabled"`
+	Host                   string            `json:"host"`
+	Port                   int               `json:"port"`
+	APIToken               string            `json:"api_token"`
+	AutoOpen               bool              `json:"auto_open"`
+	PeggBinary             string            `json:"pegg_binary"`
+	AgentArgs              []string          `json:"agent_args"`
+	Provider               string            `json:"provider"`
+	Model                  string            `json:"model"`
+	MaxParallel            int               `json:"max_parallel"`
+	TriggerColumn          string            `json:"trigger_column"`
+	ReviewColumn           string            `json:"review_column"`
+	AutoMoveOnSuccess      bool              `json:"auto_move_on_success"`
+	AutoAnswer             bool              `json:"auto_answer"`
+	AutoAnswerValue        string            `json:"auto_answer_value"`
+	BaseBranch             string            `json:"base_branch"`
+	SyncColumn             string            `json:"sync_column"`
+	SyncMinutes            int               `json:"sync_minutes"`
+	SyncUpdateExisting     bool              `json:"sync_update_existing"`
+	SyncLabels             []string          `json:"sync_labels"`
+	SyncLimit              int               `json:"sync_limit"`
+	SyncState              string            `json:"sync_state"`
+	Feedback               bool              `json:"feedback"`
+	CreateChangeRequest    bool              `json:"create_change_request"`
+	ChangeRequestProvider  string            `json:"change_request_provider"`
+	ChangeRequestProviders map[string]string `json:"change_request_providers"`
+	TransitionOnSuccess    string            `json:"transition_on_success"`
+	HooksTimeout           int               `json:"hooks_timeout_seconds"`
+	Workdir                string            `json:"-"`
+	PluginPath             string            `json:"-"`
 }
 
 func defaultSettings() Settings {
 	wd, _ := os.Getwd()
 	binary := resolvePeggBinary()
 	return Settings{
-		Enabled:            true,
-		Host:               "127.0.0.1",
-		Port:               7878,
-		AutoOpen:           true,
-		PeggBinary:         binary,
-		MaxParallel:        2,
-		TriggerColumn:      "in_progress",
-		ReviewColumn:       "review",
-		AutoMoveOnSuccess:  true,
-		AutoAnswer:         true,
-		AutoAnswerValue:    "1",
-		SyncColumn:         "backlog",
-		SyncMinutes:        0,
-		SyncUpdateExisting: true,
-		SyncLimit:          50,
-		Feedback:           true,
-		HooksTimeout:       90,
-		Workdir:            wd,
+		Enabled:             true,
+		Host:                "127.0.0.1",
+		Port:                7878,
+		AutoOpen:            true,
+		PeggBinary:          binary,
+		MaxParallel:         2,
+		TriggerColumn:       "in_progress",
+		ReviewColumn:        "review",
+		AutoMoveOnSuccess:   true,
+		AutoAnswer:          true,
+		AutoAnswerValue:     "1",
+		SyncColumn:          "backlog",
+		SyncMinutes:         0,
+		SyncUpdateExisting:  true,
+		SyncLimit:           50,
+		Feedback:            true,
+		CreateChangeRequest: true,
+		HooksTimeout:        90,
+		Workdir:             wd,
 	}
 }
 
@@ -176,6 +179,15 @@ func (s *Settings) applyEnv() {
 			s.CreateChangeRequest = b
 		}
 	}
+	if v := os.Getenv("PEGG_KANBAN_CHANGE_REQUEST_PROVIDER"); v != "" {
+		s.ChangeRequestProvider = v
+	}
+	if v := os.Getenv("PEGG_KANBAN_CHANGE_REQUEST_PROVIDERS"); strings.TrimSpace(v) != "" {
+		routes := map[string]string{}
+		if err := json.Unmarshal([]byte(v), &routes); err == nil {
+			s.ChangeRequestProviders = routes
+		}
+	}
 	if v := os.Getenv("PEGG_KANBAN_TRANSITION_ON_SUCCESS"); v != "" {
 		s.TransitionOnSuccess = v
 	}
@@ -226,6 +238,26 @@ func (s *Settings) normalize() {
 	if s.HooksTimeout <= 0 {
 		s.HooksTimeout = 90
 	}
+	s.ChangeRequestProvider = strings.ToLower(strings.TrimSpace(s.ChangeRequestProvider))
+	s.ChangeRequestProviders = normalizeRoutes(s.ChangeRequestProviders)
+}
+
+func normalizeRoutes(routes map[string]string) map[string]string {
+	if len(routes) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(routes))
+	for key, value := range routes {
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key == "" {
+			continue
+		}
+		out[key] = strings.ToLower(strings.TrimSpace(value))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s Settings) stateDir() string {
@@ -265,32 +297,35 @@ func (s Settings) serverLogPath() string {
 
 func (s Settings) sanitized() map[string]any {
 	return map[string]any{
-		"enabled":               s.Enabled,
-		"host":                  s.Host,
-		"port":                  s.Port,
-		"token_configured":      s.APIToken != "",
-		"auto_open":             s.AutoOpen,
-		"pegg_binary":           s.PeggBinary,
-		"agent_args":            s.AgentArgs,
-		"provider":              s.Provider,
-		"model":                 s.Model,
-		"max_parallel":          s.MaxParallel,
-		"trigger_column":        s.TriggerColumn,
-		"review_column":         s.ReviewColumn,
-		"auto_move_on_success":  s.AutoMoveOnSuccess,
-		"base_branch":           s.BaseBranch,
-		"sync_column":           s.SyncColumn,
-		"sync_minutes":          s.SyncMinutes,
-		"sync_update_existing":  s.SyncUpdateExisting,
-		"sync_labels":           s.SyncLabels,
-		"sync_limit":            s.SyncLimit,
-		"sync_state":            s.SyncState,
-		"feedback":              s.Feedback,
-		"create_change_request": s.CreateChangeRequest,
-		"transition_on_success": s.TransitionOnSuccess,
-		"hooks_timeout_seconds": s.HooksTimeout,
-		"board":                 s.boardPath(),
-		"workdir":               s.Workdir,
+		"enabled":                  s.Enabled,
+		"host":                     s.Host,
+		"port":                     s.Port,
+		"token_configured":         s.APIToken != "",
+		"auto_open":                s.AutoOpen,
+		"pegg_binary":              s.PeggBinary,
+		"agent_args":               s.AgentArgs,
+		"provider":                 s.Provider,
+		"model":                    s.Model,
+		"max_parallel":             s.MaxParallel,
+		"trigger_column":           s.TriggerColumn,
+		"review_column":            s.ReviewColumn,
+		"auto_move_on_success":     s.AutoMoveOnSuccess,
+		"base_branch":              s.BaseBranch,
+		"sync_column":              s.SyncColumn,
+		"sync_minutes":             s.SyncMinutes,
+		"sync_update_existing":     s.SyncUpdateExisting,
+		"sync_labels":              s.SyncLabels,
+		"sync_limit":               s.SyncLimit,
+		"sync_state":               s.SyncState,
+		"sync_target":              gitRemoteTarget(s.Workdir),
+		"feedback":                 s.Feedback,
+		"create_change_request":    s.CreateChangeRequest,
+		"change_request_provider":  s.ChangeRequestProvider,
+		"change_request_providers": s.ChangeRequestProviders,
+		"transition_on_success":    s.TransitionOnSuccess,
+		"hooks_timeout_seconds":    s.HooksTimeout,
+		"board":                    s.boardPath(),
+		"workdir":                  s.Workdir,
 	}
 }
 
